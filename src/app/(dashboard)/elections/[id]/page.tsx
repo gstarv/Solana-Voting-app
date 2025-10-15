@@ -48,13 +48,14 @@ const mockElections = {
 }
 
 interface ElectionPageProps {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
-export default function ElectionPage({ params }: ElectionPageProps) {
-  const election = mockElections[params.id as keyof typeof mockElections]
+export default async function ElectionPage({ params }: ElectionPageProps) {
+  const { id } = await params
+  const election = mockElections[id as keyof typeof mockElections]
 
   if (!election) {
     notFound()
