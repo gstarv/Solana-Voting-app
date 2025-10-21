@@ -45,22 +45,24 @@ export function ResultsChart({ results, chartType = 'bar' }: ResultsChartProps) 
     )
   }
 
-  const barData = results[0]?.candidates.map(candidate => ({
-    name: candidate.name,
-    votes: candidate.votes,
-    percentage: candidate.percentage
-  })) || []
+  const barData =
+    results[0]?.candidates.map(candidate => ({
+      name: candidate.name,
+      votes: candidate.votes,
+      percentage: candidate.percentage
+    })) || []
 
-  const pieData = results[0]?.candidates.map(candidate => ({
-    name: candidate.name,
-    value: candidate.votes
-  })) || []
+  const pieData =
+    results[0]?.candidates.map(candidate => ({
+      name: candidate.name,
+      value: candidate.votes
+    })) || []
 
   // Calculate average participation with explicit typing
   const totalParticipation = results.reduce((acc: number, result: ResultsData) => {
     return acc + result.participationRate
   }, 0)
-  
+
   const averageParticipation = Math.round(totalParticipation / results.length)
 
   return (
@@ -70,7 +72,9 @@ export function ResultsChart({ results, chartType = 'bar' }: ResultsChartProps) 
         <Card>
           <CardContent className="p-4 text-center">
             <div className="text-2xl font-bold text-blue-600">
-              {results.reduce((total: number, result: ResultsData) => total + result.totalVotes, 0).toLocaleString()}
+              {results
+                .reduce((total: number, result: ResultsData) => total + result.totalVotes, 0)
+                .toLocaleString()}
             </div>
             <p className="text-sm text-gray-600">Total Votes Cast</p>
           </CardContent>
@@ -118,7 +122,7 @@ export function ResultsChart({ results, chartType = 'bar' }: ResultsChartProps) 
                     labelLine={false}
                     label={(props: PieLabelRenderProps) => {
                       const name = props.name
-                      const percent = props.percent ?? 0
+                      const percent = Number(props.percent ?? 0)
                       return `${name} (${(percent * 100).toFixed(1)}%)`
                     }}
                     outerRadius={80}
@@ -126,7 +130,10 @@ export function ResultsChart({ results, chartType = 'bar' }: ResultsChartProps) 
                     dataKey="value"
                   >
                     {pieData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={COLORS[index % COLORS.length]}
+                      />
                     ))}
                   </Pie>
                   <Tooltip formatter={(value: number) => [value.toLocaleString(), 'Votes']} />
@@ -139,15 +146,18 @@ export function ResultsChart({ results, chartType = 'bar' }: ResultsChartProps) 
 
       {/* Detailed Results */}
       <div className="space-y-4">
-        {results.map((positionResult) => (
+        {results.map(positionResult => (
           <Card key={positionResult.position}>
             <CardHeader>
               <CardTitle className="text-lg">{positionResult.position}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {positionResult.candidates.map((candidate) => (
-                  <div key={candidate.name} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                {positionResult.candidates.map(candidate => (
+                  <div
+                    key={candidate.name}
+                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                  >
                     <div className="flex items-center gap-3">
                       <div
                         className="w-3 h-3 rounded-full"
@@ -156,8 +166,12 @@ export function ResultsChart({ results, chartType = 'bar' }: ResultsChartProps) 
                       <span className="font-medium">{candidate.name}</span>
                     </div>
                     <div className="text-right">
-                      <div className="font-semibold">{candidate.votes.toLocaleString()} votes</div>
-                      <div className="text-sm text-gray-600">{candidate.percentage}%</div>
+                      <div className="font-semibold">
+                        {candidate.votes.toLocaleString()} votes
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        {candidate.percentage}%
+                      </div>
                     </div>
                   </div>
                 ))}

@@ -1,3 +1,4 @@
+import '@solana/wallet-adapter-react-ui/styles.css';
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "@/app/globals.css";  // ← Changed to absolute import
