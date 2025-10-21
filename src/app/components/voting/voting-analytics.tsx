@@ -14,9 +14,10 @@ import {
   Pie,
   Cell,
   LineChart,
-  Line
+  Line,
+  PieLabelRenderProps
 } from 'recharts'
-import { TrendingUp, Users, Vote, Clock, Target } from 'lucide-react'
+import { TrendingUp, Users, Clock, Target } from 'lucide-react'
 
 interface VotingAnalyticsProps {
   electionId: string
@@ -52,6 +53,14 @@ export function VotingAnalytics({ electionId, timeRange = '7d' }: VotingAnalytic
   const participationRate = 67 // Mock data
   const averageVotingTime = '2.5 minutes'
 
+  // ✅ Fixed Pie label function with proper typing
+  const renderPieLabel = (props: PieLabelRenderProps) => {
+    const { name, value } = props
+    if (!name || typeof value !== 'number') return ''
+    const percentage = (value / totalVotes) * 100
+    return `${name} (${percentage.toFixed(1)}%)`
+  }
+
   return (
     <div className="space-y-6">
       {/* Key Metrics */}
@@ -67,6 +76,7 @@ export function VotingAnalytics({ electionId, timeRange = '7d' }: VotingAnalytic
             </div>
           </CardContent>
         </Card>
+
         <Card>
           <CardContent className="p-4 flex items-center gap-3">
             <div className="p-2 bg-green-100 rounded-lg">
@@ -78,6 +88,7 @@ export function VotingAnalytics({ electionId, timeRange = '7d' }: VotingAnalytic
             </div>
           </CardContent>
         </Card>
+
         <Card>
           <CardContent className="p-4 flex items-center gap-3">
             <div className="p-2 bg-purple-100 rounded-lg">
@@ -89,6 +100,7 @@ export function VotingAnalytics({ electionId, timeRange = '7d' }: VotingAnalytic
             </div>
           </CardContent>
         </Card>
+
         <Card>
           <CardContent className="p-4 flex items-center gap-3">
             <div className="p-2 bg-orange-100 rounded-lg">
@@ -144,7 +156,7 @@ export function VotingAnalytics({ electionId, timeRange = '7d' }: VotingAnalytic
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={({ name, percentage }) => `${name} (${((percentage || 0) * 100).toFixed(1)}%)`}
+                    label={renderPieLabel}
                     outerRadius={80}
                     fill="#8884d8"
                     dataKey="votes"
@@ -189,8 +201,8 @@ export function VotingAnalytics({ electionId, timeRange = '7d' }: VotingAnalytic
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {demographicData.map((faculty, index) => {
-                const participationRate = Math.round((faculty.votes / 2000) * 100) // Mock total voters
+              {demographicData.map((faculty) => {
+                const participationRate = Math.round((faculty.votes / 2000) * 100)
                 return (
                   <div key={faculty.name} className="space-y-2">
                     <div className="flex items-center justify-between">
