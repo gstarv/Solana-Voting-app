@@ -15,11 +15,11 @@ import { cn } from '@/app/lib/utils'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Elections', href: '/dashboard/elections', icon: Vote },
-  { name: 'Results', href: '/dashboard/results', icon: BarChart3 },
-  { name: 'My Votes', href: '/dashboard/my-votes', icon: History },
-  { name: 'Profile', href: '/dashboard/profile', icon: User },
-  { name: 'Help', href: '/dashboard/help', icon: HelpCircle },
+  { name: 'Elections', href: '/elections', icon: Vote }, // ✅ CHANGED: /dashboard/elections → /elections
+  { name: 'Results', href: '/results', icon: BarChart3 }, // ✅ CHANGED: /dashboard/results → /results
+  { name: 'My Votes', href: '/my-votes', icon: History }, // ✅ CHANGED: /dashboard/my-votes → /my-votes
+  { name: 'Profile', href: '/profile', icon: User }, // ✅ CHANGED: /dashboard/profile → /profile
+  { name: 'Help', href: '/help', icon: HelpCircle }, // ✅ CHANGED: /dashboard/help → /help
 ]
 
 export function DashboardSidebar() {

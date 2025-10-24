@@ -7,6 +7,12 @@ import { Button } from '../ui/button'
 import { Search } from 'lucide-react'
 import { EmptyState } from '../shared/empty-state'
 
+// ✅ ADD THIS INTERFACE
+interface ElectionListProps {
+  onVoteNow?: (electionId: string) => void
+  onViewResults?: (electionId: string) => void
+}
+
 const mockElections = [
   {
     id: '1',
@@ -41,7 +47,8 @@ const mockElections = [
 const electionTypes = ['all', 'university', 'faculty', 'department'] as const
 type ElectionType = typeof electionTypes[number]
 
-export function ElectionList() {
+// ✅ UPDATE FUNCTION SIGNATURE TO ACCEPT PROPS
+export function ElectionList({ onVoteNow, onViewResults }: ElectionListProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [filter, setFilter] = useState<ElectionType>('all')
   const [sortBy, setSortBy] = useState<'startDate' | 'endDate' | 'voterCount'>('startDate')
