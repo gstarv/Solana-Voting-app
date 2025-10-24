@@ -47,7 +47,7 @@ export default function HomePage() {
             </div>
             <div className="flex items-center space-x-4">
               <Link 
-                href="/components/dashboard"  // Updated to correct dashboard path
+                href="/dashboard"  // Updated to correct dashboard path
                 className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium"
               >
                 Enter Dashboard
