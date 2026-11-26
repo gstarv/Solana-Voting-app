@@ -1,4 +1,4 @@
-import { PublicKey } from '@solana/web3.js'
+import { PublicKey, TransactionInstruction } from '@solana/web3.js'
 
 export const VOTING_PROGRAM_ID = new PublicKey(
   process.env.NEXT_PUBLIC_VOTING_PROGRAM_ID || '3XkfBi8AkX3Ce9nYYMcNG3Ai9xNKwQzxULexxJaPFQ37',
@@ -34,7 +34,11 @@ export function deriveVoteReceiptAddress(electionAddress: PublicKey, voter: Publ
 
 async function instructionDiscriminator(instructionName: string): Promise<Uint8Array> {
   const input = new TextEncoder().encode(`global:${instructionName}`)
-  const digest = await globalThis.crypto.subtle.digest('SHA-256', input)
+  // Copy into an owned ArrayBuffer so TypeScript's stricter BufferSource types
+  // don't see the input as potentially backed by SharedArrayBuffer.
+  const ownedInput = new Uint8Array(input.byteLength)
+  ownedInput.set(input)
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', ownedInput.buffer)
   return new Uint8Array(digest).slice(0, 8)
 }
 
@@ -68,7 +72,7 @@ export async function makeInitializeElectionInstruction(
 
   return {
     electionAddress,
-    instruction: new (await import('@solana/web3.js')).TransactionInstruction({
+    instruction: new TransactionInstruction({
       programId: VOTING_PROGRAM_ID,
       keys: [
         { pubkey: electionAddress, isSigner: false, isWritable: true },
@@ -96,7 +100,7 @@ export async function makeCastVoteInstruction(
 
   return {
     receiptAddress,
-    instruction: new (await import('@solana/web3.js')).TransactionInstruction({
+    instruction: new TransactionInstruction({
       programId: VOTING_PROGRAM_ID,
       keys: [
         { pubkey: electionAddress, isSigner: false, isWritable: true },
