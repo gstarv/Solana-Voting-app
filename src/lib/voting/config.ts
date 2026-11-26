@@ -4,7 +4,7 @@ export function getConfiguredNetwork() {
   return {
     network: 'devnet',
     rpcUrl: process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.devnet.solana.com',
-    programId: process.env.NEXT_PUBLIC_VOTING_PROGRAM_ID || null,
+    programId: process.env.NEXT_PUBLIC_VOTING_PROGRAM_ID || '3XkfBi8AkX3Ce9nYYMcNG3Ai9xNKwQzxULexxJaPFQ37',
   }
 }
 

@@ -1,21 +1,21 @@
-# VoteChain demo on Vercel
+# Solana Devnet Voting Demo
 
-The project can be imported into Vercel and deployed without Supabase credentials, a Solana program ID, an RPC provider account, or wallet setup. The interactive demo is available at `/demo` and calls the Next.js `/api/elections` and `/api/votes` routes.
+The `/demo` page submits real wallet-signed transactions to the configured Anchor voting program on Solana Devnet. It checks the program, election PDA, and the connected wallet's vote-receipt PDA directly against the RPC endpoint.
 
-## What the demo does
+## Election setup
 
-- Loads a sample election from the demo API.
-- Validates the election and candidate in the vote API.
-- Returns a simulated demo receipt.
-- Saves the receipt in the current browser's local storage so the same browser shows its demo vote after refresh.
+The demo derives the election PDA from the stable election slug in `src/lib/voting/demo-data.ts`, encoded as UTF-8 and zero-padded to the Anchor program's 32-byte election ID. The configured authority wallet must connect and initialize the election once; the wallet signs and pays the Devnet transaction fee. Voters then connect their own wallets and sign `cast_vote` transactions. The program's receipt PDA enforces one vote per wallet per election.
 
-Demo votes are not stored in a shared database, do not persist across browsers/devices, and are not submitted to Solana. This is for interface and API-flow testing only—not a secure, anonymous, or legally valid election.
+This demo writes each selected candidate index to the program's public on-chain receipt account. It is a Devnet demonstration, not a secure, anonymous, or legally valid election; candidate choice is publicly visible in account data and election setup is specific to the current demo program.
 
-## Deploy
+## Environment
 
-1. Import this repository into Vercel and choose the `copilot/solana-voting-demo-integration` branch (or deploy the branch through a PR).
-2. Use the repository root as the project root and the default Next.js build settings.
-3. No environment variables are required for demo mode.
-4. Open the Vercel deployment URL and visit `/demo` on your phone.
+Set these Vercel variables for Preview and Production:
 
-The Supabase schema and Anchor program are scaffolds for later integration; they are not used by this demo flow.
+- `NEXT_PUBLIC_SOLANA_RPC_URL` (optional; defaults to Solana Devnet RPC)
+- `NEXT_PUBLIC_VOTING_PROGRAM_ID`
+- `NEXT_PUBLIC_VOTING_AUTHORITY`
+
+The public program ID and authority address are not secrets. Never put wallet private keys or keypair files in GitHub or Vercel. Supabase service-role credentials must remain server-only.
+
+After merging or deploying the integration branch, redeploy Vercel so the client bundle includes the public environment variables.

@@ -1,121 +1,189 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, LoaderCircle, Vote } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useConnection, useWallet, WalletMultiButton } from '@solana/wallet-adapter-react'
+import { PublicKey, Transaction } from '@solana/web3.js'
+import { CheckCircle2, ExternalLink, LoaderCircle, Vote } from 'lucide-react'
 import type { DemoElection } from '@/lib/voting/demo-data'
+import {
+  deriveElectionAddress,
+  makeCastVoteInstruction,
+  makeInitializeElectionInstruction,
+  VOTING_AUTHORITY,
+  VOTING_PROGRAM_ID,
+} from '@/lib/voting/solana-voting'
 
-type DemoReceipt = {
+type ChainState = {
+  programAvailable: boolean
+  electionInitialized: boolean
+  alreadyVoted: boolean
+}
+
+type SubmissionResult = {
   electionId: string
   candidateId: string
   candidateName: string
-  receiptId: string
-  createdAt: string
-}
-
-const STORAGE_KEY = 'votechain-demo-receipts'
-
-function readReceipts(): DemoReceipt[] {
-  try {
-    const value = window.localStorage.getItem(STORAGE_KEY)
-    return value ? (JSON.parse(value) as DemoReceipt[]) : []
-  } catch {
-    return []
-  }
+  signature: string
 }
 
 export function VotingDemo() {
+  const { connection } = useConnection()
+  const { connected, publicKey, sendTransaction } = useWallet()
   const [elections, setElections] = useState<DemoElection[]>([])
   const [selectedElectionId, setSelectedElectionId] = useState('')
   const [selectedCandidateId, setSelectedCandidateId] = useState('')
-  const [receipts, setReceipts] = useState<DemoReceipt[]>([])
+  const [chainState, setChainState] = useState<ChainState>({
+    programAvailable: false,
+    electionInitialized: false,
+    alreadyVoted: false,
+  })
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [result, setResult] = useState<SubmissionResult | null>(null)
 
   useEffect(() => {
-    setReceipts(readReceipts())
     fetch('/api/elections')
       .then(async (response) => {
-        if (!response.ok) throw new Error('Could not load demo elections.')
-        return response.json()
+        if (!response.ok) throw new Error('Could not load elections.')
+        return response.json() as Promise<{ elections: DemoElection[] }>
       })
-      .then((data: { elections: DemoElection[] }) => {
-        setElections(data.elections)
-        setSelectedElectionId(data.elections[0]?.id ?? '')
+      .then(({ elections: loadedElections }) => {
+        setElections(loadedElections)
+        setSelectedElectionId(loadedElections[0]?.id ?? '')
       })
-      .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : 'Could not load demo elections.'))
+      .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : 'Could not load elections.'))
       .finally(() => setLoading(false))
   }, [])
 
   const election = elections.find((item) => item.id === selectedElectionId)
-  const voted = receipts.some((receipt) => receipt.electionId === selectedElectionId)
-  const voteCounts = useMemo(() => {
-    return receipts
-      .filter((receipt) => receipt.electionId === selectedElectionId)
-      .reduce<Record<string, number>>((counts, receipt) => {
-        counts[receipt.candidateId] = (counts[receipt.candidateId] ?? 0) + 1
-        return counts
-      }, {})
-  }, [receipts, selectedElectionId])
+  const electionAddress = useMemo(
+    () => election ? deriveElectionAddress(election.id) : null,
+    [election],
+  )
+  const isAuthority = Boolean(publicKey?.equals(VOTING_AUTHORITY))
 
-  async function submitVote() {
-    if (!election || !selectedCandidateId || voted || submitting) return
+  const refreshChainState = useCallback(async () => {
+    if (!electionAddress) return
+    try {
+      const [programInfo, electionInfo] = await Promise.all([
+        connection.getAccountInfo(VOTING_PROGRAM_ID, 'confirmed'),
+        connection.getAccountInfo(electionAddress, 'confirmed'),
+      ])
+      const programAvailable = Boolean(programInfo?.executable)
+      const electionInitialized = Boolean(electionInfo?.owner.equals(VOTING_PROGRAM_ID))
+      let alreadyVoted = false
+      if (publicKey && electionInitialized) {
+        const [receiptAddress] = PublicKey.findProgramAddressSync(
+          [new TextEncoder().encode('receipt'), electionAddress.toBuffer(), publicKey.toBuffer()],
+          VOTING_PROGRAM_ID,
+        )
+        const receiptInfo = await connection.getAccountInfo(receiptAddress, 'confirmed')
+        alreadyVoted = Boolean(receiptInfo?.owner.equals(VOTING_PROGRAM_ID))
+      }
+      setChainState({ programAvailable, electionInitialized, alreadyVoted })
+      if (!programAvailable) setError('The voting program was not found on the configured Solana network.')
+      else if (electionInfo && !electionInitialized) setError('The derived election address is occupied by an unexpected account.')
+      else setError('')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not read election state from Solana.')
+    }
+  }, [connection, electionAddress, publicKey])
+
+  useEffect(() => {
+    void refreshChainState()
+  }, [refreshChainState])
+
+  async function sendAndConfirm(transaction: Transaction) {
+    if (!publicKey) throw new Error('Connect a Solana wallet first.')
+    const latest = await connection.getLatestBlockhash('confirmed')
+    transaction.feePayer = publicKey
+    transaction.recentBlockhash = latest.blockhash
+    const signature = await sendTransaction(transaction, connection, { preflightCommitment: 'confirmed' })
+    const confirmation = await connection.confirmTransaction({
+      signature,
+      blockhash: latest.blockhash,
+      lastValidBlockHeight: latest.lastValidBlockHeight,
+    }, 'confirmed')
+    if (confirmation.value.err) throw new Error('The Solana transaction failed to confirm.')
+    return signature
+  }
+
+  async function initializeElection() {
+    if (!election || !publicKey || !isAuthority || submitting) return
     setSubmitting(true)
     setError('')
-
     try {
-      const response = await fetch('/api/votes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ electionId: election.id, candidateId: selectedCandidateId }),
-      })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.error || 'Demo vote could not be submitted.')
-
-      const candidate = election.candidates.find((item) => item.id === selectedCandidateId)
-      const receipt: DemoReceipt = {
-        electionId: election.id,
-        candidateId: selectedCandidateId,
-        candidateName: candidate?.name ?? 'Selected candidate',
-        receiptId: result.receiptId,
-        createdAt: result.createdAt,
-      }
-      const updatedReceipts = [...readReceipts(), receipt]
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedReceipts))
-      setReceipts(updatedReceipts)
+      const { electionAddress: address, instruction } = await makeInitializeElectionInstruction(
+        election.id,
+        election.candidates.length,
+        publicKey,
+      )
+      const transaction = new Transaction().add(instruction)
+      const signature = await sendAndConfirm(transaction)
+      setResult({ electionId: election.id, candidateId: '', candidateName: 'Election initialized', signature })
+      await refreshChainState()
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Demo vote could not be submitted.')
+      setError(cause instanceof Error ? cause.message : 'Could not initialize the election.')
     } finally {
       setSubmitting(false)
     }
   }
 
+  async function submitVote() {
+    if (!election || !electionAddress || !publicKey || !selectedCandidateId || submitting) return
+    setSubmitting(true)
+    setError('')
+    setResult(null)
+    try {
+      const candidateIndex = election.candidates.findIndex((candidate) => candidate.id === selectedCandidateId)
+      if (candidateIndex < 0) throw new Error('Select a valid candidate.')
+      const { instruction } = await makeCastVoteInstruction(electionAddress, publicKey, candidateIndex)
+      const transaction = new Transaction().add(instruction)
+      const signature = await sendAndConfirm(transaction)
+      const candidate = election.candidates[candidateIndex]
+      setResult({ electionId: election.id, candidateId: candidate.id, candidateName: candidate.name, signature })
+      await refreshChainState()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not submit the vote to Solana.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const explorerUrl = result
+    ? `https://explorer.solana.com/tx/${result.signature}?cluster=devnet`
+    : null
+
   return (
     <main className="mx-auto min-h-screen max-w-3xl px-4 py-8 sm:px-6">
-      <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-        <strong>Demo mode:</strong> submissions are simulated by the Next.js API and saved only in this browser. No real vote is sent to Solana, and clearing browser storage resets this demo.
+      <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
+        <strong>Solana Devnet:</strong> votes are submitted as wallet-signed transactions. Each wallet can submit one vote per election. Transactions and account creation require Devnet SOL for fees.
       </div>
 
       <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-8">
-        <div className="mb-6 flex items-start gap-3">
-          <div className="rounded-lg bg-blue-100 p-3 text-blue-700"><Vote className="h-6 w-6" /></div>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Try the voting demo</h1>
-            <p className="mt-1 text-gray-600">Choose a candidate and submit a simulated vote through the demo backend.</p>
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="rounded-lg bg-blue-100 p-3 text-blue-700"><Vote className="h-6 w-6" /></div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Vote on Solana</h1>
+              <p className="mt-1 text-gray-600">Select a candidate and approve the transaction in your wallet.</p>
+            </div>
           </div>
+          <WalletMultiButton />
         </div>
 
         {loading ? (
-          <p className="flex items-center gap-2 py-8 text-gray-600"><LoaderCircle className="h-4 w-4 animate-spin" /> Loading demo election…</p>
-        ) : error && elections.length === 0 ? (
-          <p role="alert" className="rounded-lg bg-red-50 p-4 text-red-700">{error}</p>
-        ) : election ? (
+          <p className="flex items-center gap-2 py-8 text-gray-600"><LoaderCircle className="h-4 w-4 animate-spin" /> Loading election…</p>
+        ) : !election ? (
+          <p className="py-8 text-gray-600">No elections are available.</p>
+        ) : (
           <>
             <label htmlFor="demo-election" className="mb-2 block text-sm font-medium text-gray-700">Election</label>
             <select
               id="demo-election"
               value={selectedElectionId}
-              onChange={(event) => { setSelectedElectionId(event.target.value); setSelectedCandidateId(''); setError('') }}
+              onChange={(event) => { setSelectedElectionId(event.target.value); setSelectedCandidateId(''); setResult(null); setError('') }}
               className="mb-5 w-full rounded-lg border border-gray-300 bg-white p-3 text-gray-900"
             >
               {elections.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
@@ -124,7 +192,7 @@ export function VotingDemo() {
             <div className="mb-5 rounded-lg bg-gray-50 p-4">
               <h2 className="font-semibold text-gray-900">{election.title}</h2>
               <p className="mt-1 text-sm text-gray-600">{election.description}</p>
-              <p className="mt-2 text-xs text-gray-500">{election.location} · {election.status} · Ends {new Date(election.endDate).toLocaleDateString()}</p>
+              <p className="mt-2 break-all text-xs text-gray-500">Devnet election account: {electionAddress?.toBase58()}</p>
             </div>
 
             <h2 className="mb-3 text-lg font-semibold text-gray-900">Select one candidate</h2>
@@ -136,47 +204,69 @@ export function VotingDemo() {
                     key={candidate.id}
                     type="button"
                     onClick={() => setSelectedCandidateId(candidate.id)}
-                    disabled={voted || election.status !== 'active'}
+                    disabled={chainState.alreadyVoted || election.status !== 'active'}
                     aria-pressed={selected}
-                    className={`w-full rounded-xl border p-4 text-left transition-colors disabled:cursor-not-allowed ${selected ? 'border-blue-600 bg-blue-50 ring-1 ring-blue-600' : 'border-gray-200 hover:border-blue-300'} ${voted ? 'opacity-75' : ''}`}
+                    className={`w-full rounded-xl border p-4 text-left transition-colors disabled:cursor-not-allowed ${selected ? 'border-blue-600 bg-blue-50 ring-1 ring-blue-600' : 'border-gray-200 hover:border-blue-300'} ${chainState.alreadyVoted ? 'opacity-75' : ''}`}
                   >
-                    <span className="flex items-center justify-between gap-3">
-                      <span>
-                        <span className="block font-semibold text-gray-900">{candidate.name}</span>
-                        <span className="block text-sm text-gray-600">{candidate.position} · {candidate.department}</span>
-                        <span className="mt-2 block text-sm text-gray-700">{candidate.manifesto}</span>
-                      </span>
-                      {selected && <CheckCircle2 className="h-5 w-5 shrink-0 text-blue-700" />}
-                    </span>
-                    <span className="mt-3 block text-xs text-gray-500">This browser’s demo votes: {voteCounts[candidate.id] ?? 0}</span>
+                    <span className="block font-semibold text-gray-900">{candidate.name}</span>
+                    <span className="block text-sm text-gray-600">{candidate.position} · {candidate.department}</span>
+                    <span className="mt-2 block text-sm text-gray-700">{candidate.manifesto}</span>
                   </button>
                 )
               })}
             </div>
 
-            {error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+            <div className="mt-5 rounded-lg border border-gray-200 p-4 text-sm">
+              <p><strong>Program:</strong> <span className="break-all font-mono">{VOTING_PROGRAM_ID.toBase58()}</span></p>
+              <p className="mt-1"><strong>Authority:</strong> <span className="break-all font-mono">{VOTING_AUTHORITY.toBase58()}</span></p>
+              <p className="mt-1"><strong>Election:</strong> {chainState.electionInitialized ? 'Initialized on Devnet' : 'Not initialized yet'}</p>
+              {connected && <p className="mt-1"><strong>Your wallet:</strong> {chainState.alreadyVoted ? 'Vote receipt found on Devnet' : 'No vote receipt found'}</p>}
+            </div>
 
-            {voted ? (
+            {chainState.programAvailable && !chainState.electionInitialized && isAuthority && election.status === 'active' && (
+              <button
+                type="button"
+                onClick={initializeElection}
+                disabled={submitting}
+                className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+              >
+                {submitting && <LoaderCircle className="h-4 w-4 animate-spin" />}
+                {submitting ? 'Waiting for wallet confirmation…' : 'Initialize election (authority wallet)'}
+              </button>
+            )}
+
+            {chainState.programAvailable && !chainState.electionInitialized && !isAuthority && (
+              <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+                This election must be initialized once by the configured authority wallet ({VOTING_AUTHORITY.toBase58()}). Connect that wallet to initialize it; voters can then connect their own wallets.
+              </p>
+            )}
+
+            {chainState.alreadyVoted ? (
               <div role="status" className="mt-5 rounded-xl border border-green-200 bg-green-50 p-4 text-green-900">
-                <p className="font-semibold">Demo vote recorded for this browser.</p>
-                {receipts.filter((receipt) => receipt.electionId === election.id).map((receipt) => (
-                  <p key={receipt.receiptId} className="mt-1 break-all text-sm">Choice: {receipt.candidateName} · Demo receipt: {receipt.receiptId}</p>
-                ))}
+                <p className="font-semibold">Your vote receipt is recorded on Devnet. This wallet cannot vote again in this election.</p>
               </div>
             ) : (
               <button
                 type="button"
                 onClick={submitVote}
-                disabled={!selectedCandidateId || submitting || election.status !== 'active'}
+                disabled={!connected || !publicKey || !selectedCandidateId || submitting || !chainState.programAvailable || !chainState.electionInitialized || election.status !== 'active'}
                 className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
               >
                 {submitting && <LoaderCircle className="h-4 w-4 animate-spin" />}
-                {submitting ? 'Submitting demo vote…' : election.status === 'active' ? 'Submit demo vote' : 'Election is not open'}
+                {submitting ? 'Waiting for wallet confirmation…' : election.status === 'active' ? 'Submit vote on Devnet' : 'Election is not open'}
               </button>
             )}
           </>
-        ) : (
-          <p className="py-8 text-gray-600">No demo elections are available.</p>
+        )}
+
+        {error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+        {result && explorerUrl && (
+          <div role="status" className="mt-5 rounded-xl border border-green-200 bg-green-50 p-4 text-green-900">
+            <p className="font-semibold">{result.candidateId ? `Vote submitted for ${result.candidateName}.` : 'Election initialized on Devnet.'}</p>
+            <a href={explorerUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-2 break-all text-sm underline">
+              View confirmed transaction <ExternalLink className="h-4 w-4 shrink-0" />
+            </a>
+          </div>
         )}
       </section>
     </main>

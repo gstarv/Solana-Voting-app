@@ -9,28 +9,25 @@ import { clusterApiUrl } from '@solana/web3.js'
 import { ReactNode, useMemo } from 'react'
 import '@solana/wallet-adapter-react-ui/styles.css'
 
-
 const queryClient = new QueryClient()
 
 export function Providers({ children }: { children: ReactNode }) {
   const network = WalletAdapterNetwork.Devnet
-  const endpoint = useMemo(() => clusterApiUrl(network), [network])
-  
+  const endpoint = useMemo(
+    () => process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(network),
+    [network],
+  )
+
   const wallets = useMemo(
-    () => [
-      new PhantomWalletAdapter(),
-      new SolflareWalletAdapter(),
-    ],
-    []
+    () => [new PhantomWalletAdapter(), new SolflareWalletAdapter()],
+    [],
   )
 
   return (
     <QueryClientProvider client={queryClient}>
       <ConnectionProvider endpoint={endpoint}>
         <WalletProvider wallets={wallets} autoConnect>
-          <WalletModalProvider>
-            {children}
-          </WalletModalProvider>
+          <WalletModalProvider>{children}</WalletModalProvider>
         </WalletProvider>
       </ConnectionProvider>
     </QueryClientProvider>
