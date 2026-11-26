@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useConnection, useWallet } from '@solana/wallet-adapter-react'
 import { PublicKey, Transaction } from '@solana/web3.js'
@@ -143,7 +144,7 @@ export function VotingDemo() {
     <main className="min-h-screen bg-[#f7f8fc] pb-16 text-slate-900">
       <div className="mx-auto max-w-6xl px-4 pt-5 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between gap-4">
-          <a href="/" className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 transition hover:text-slate-950"><span className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 bg-white"><Vote className="h-4 w-4" /></span>Campus ballot</a>
+          <Link href="/" className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 transition hover:text-slate-950"><span className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 bg-white"><Vote className="h-4 w-4" /></span>Campus ballot</Link>
           <div className="flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800"><span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />Solana Devnet</div>
         </div>
 
