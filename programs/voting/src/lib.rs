@@ -47,7 +47,7 @@ pub struct InitializeElection<'info> {
         init,
         payer = authority,
         space = 8 + Election::INIT_SPACE,
-        seeds = [b"election", &election_id],
+        seeds = [b"election", election_id.as_ref()],
         bump,
     )]
     pub election: Account<'info, Election>,
